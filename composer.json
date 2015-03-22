@@ -1,0 +1,16 @@
+{
+	"name": "aliasio/congregate",
+	"description": "",
+	"authors": [
+		{
+			"name": "Elbert Alias",
+			"email": "elbert@alias.io",
+			"homepage": "https://alias.io"
+		}
+	],
+	"license": "GPL-3.0",
+	"homepage": "https://alias.io",
+	"autoload": {
+		"psr-4": { "Congregate\\": "src/Congregate/" }
+	}
+}
