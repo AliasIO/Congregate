@@ -23,6 +23,4 @@ RUN \
 	curl -sS https://getcomposer.org/installer | php && \
 	php composer.phar install
 
-RUN php init.php
-
 ENTRYPOINT ["php", "index.php"]

@@ -27,7 +27,7 @@ try {
 
 	$results->phoneNumbers = PhoneNumberScraper::scrape($doc);
 
-	var_dump($results);
+	echo json_encode($results) . "\n";
 } catch ( \Exception $e ) {
 	echo $e->getMessage() . "\n";
 

@@ -30,6 +30,11 @@ class PhoneNumberScraper implements ScraperInterface
 
 	public static function scrape(\DOMDocument $doc) {
 		$phoneNumbers = [];
+		$results      = [
+			'href:tel'   => [],
+			'href:skype' => [],
+			'country:us' => []
+			];
 
 		$xpath = new \DOMXpath($doc);
 
@@ -38,25 +43,71 @@ class PhoneNumberScraper implements ScraperInterface
 		foreach ( $textNodes as $textNode ) {
 			$text = $textNode->textContent;
 
-			$result = self::testNANP($text);
-
-			if ( $result ) {
-				$phoneNumbers[] = $result;
+			if ( $result = self::testUS($text) ) {
+				$results['country:us'] = array_merge($results['country:us'], $result);
 			}
 		}
 
-		foreach ( $doc->getElementsByTagName('a') as $anchor ) {
-			if ( $link = $anchor->getAttribute('href') ) {
-				if ( preg_match('/^tel:(.+$)/', $link, $match) && isset($match[1]) ) {
-					$results->phoneNumbers[] = $match[1];
+		if ( $result = self::testTel($doc) ) {
+			$results['href:tel'] = $result;
+		}
+
+		if ( $result = self::testSkype($doc) ) {
+			$results['href:skype'] = $result;
+		}
+
+		foreach ( $results as $locality => $values ) {
+			if ( $values ) {
+				foreach ( $values as $value ) {
+					if ( !isset($phoneNumbers[$value]) ) {
+						$phoneNumbers[$value] = [];
+					}
+
+					$phoneNumbers[$value][] = $locality;
 				}
 			}
 		}
 
+		$phoneNumbers = self::filter($phoneNumbers);
+
+		ksort($phoneNumbers);
+
 		return $phoneNumbers;
 	}
 
-	private static function testNANP($string) {
+	private static function testTel(\DOMDocument $doc) {
+		$results = [];
+
+		foreach ( $doc->getElementsByTagName('a') as $anchor ) {
+			if ( $link = $anchor->getAttribute('href') ) {
+				if ( preg_match('/^tel:(.+$)/', $link, $match) && isset($match[1]) ) {
+					$results[] = $match[1];
+				}
+			}
+		}
+
+		return $results;
+	}
+
+	private static function testSkype(\DOMDocument $doc) {
+		$results = [];
+
+		foreach ( $doc->getElementsByTagName('a') as $anchor ) {
+			if ( $link = $anchor->getAttribute('href') ) {
+				if ( preg_match('/^skype:(.+$)/', $link, $match) && isset($match[1]) ) {
+					$participants = explode(';', preg_replace('/\?.*$/', '', $match[1]));
+
+					foreach ( $participants as $participant ) {
+						$results[] = $participant;
+					}
+				}
+			}
+		}
+
+		return array_unique($results);
+	}
+
+	private static function testUS($string = '') {
 		$areaCodes = [
 			'205', '251', '256', '334', '938', '907', '480', '520', '602', '623',
 			'928', '479', '501', '870', '209', '213', '310', '323', '408', '415',
@@ -92,9 +143,6 @@ class PhoneNumberScraper implements ScraperInterface
 		 	'888',
 			];
 
-
-		$results = [];
-
 		$country    = "(?:00|\+)1";
 		$area       = "(?:" . implode('|', $areaCodes) . ")";
 		$co         = "[2-9][0-9]{2}";
@@ -111,34 +159,42 @@ class PhoneNumberScraper implements ScraperInterface
 			"${co} ${subscriber}",
 			];
 
-		$results = self::evaluate($patterns, $string);
-
-		return $results;
+		return self::evaluate($patterns, $string);
 	}
 
+	/**
+	 * Evaluate multiple regular expressions
+	 */
 	private static function evaluate(array $patterns = [], $string = '') {
 		$results = [];
 
 		foreach ( $patterns as $pattern ) {
 			if ( preg_match_all('/(?:^|\s|\()' . $pattern . '(?:\)|\s|$)/i', $string, $matches) ) {
 				foreach ( $matches as $match ) {
-					$results[] = rtrim(ltrim(trim($match[0]), '('), ')');
+					$result = rtrim(ltrim(trim($match[0]), '('), ')');
+
+					if ( !in_array($result, $results) ) {
+						$results[] = $result;
+					}
 				}
 			}
 		}
 
-		self::filter($results);
-
 		return $results;
 	}
 
-	private static function filter(array &$values = []) {
-		$values = array_filter($values, function($self) use($values) {
-			foreach ( $values as $value ) {
-				return !( strpos($value, $self) !== false && strlen($value) > strlen($self) );
+	/**
+	 * Remove match if a longer match exists
+	 */
+	private static function filter(array $array = []) {
+		foreach ( $array as $self => $value ) {
+			foreach ( $array as $key => $value ) {
+				if ( strpos($key, $self) !== false && strlen($key) > strlen($self) ) {
+					unset($array[$self]);
+				}
 			}
-		});
+		}
 
-		$values = array_unique($values);
+		return $array;
 	}
 }
