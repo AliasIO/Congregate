@@ -17,16 +17,26 @@ try {
 		$html .= $line;
 	}
 
-	$doc = new \DOMDocument();
+	if ( $html ) {
+		$doc = new \DOMDocument();
 
-	libxml_use_internal_errors(true);
+		libxml_use_internal_errors(true);
 
-	$doc->loadHTML($html);
+		$doc->loadHTML($html);
 
-	libxml_clear_errors();
+		libxml_clear_errors();
 
-	$results->phone_numbers   = PhoneNumberScraper::scrape($doc);
-	$results->email_addresses = EmailAddressScraper::scrape($doc);
+		$phoneNumbers   = PhoneNumberScraper::scrape($doc);
+		$emailAddresses = EmailAddressScraper::scrape($doc);
+
+		if ( $phoneNumbers ) {
+			$results->phone_numbers = $phoneNumbers;
+		}
+
+		if ( $emailAddresses ) {
+			$results->email_addresses = $emailAddresses;
+		}
+	}
 
 	echo json_encode($results) . "\n";
 } catch ( \Exception $e ) {

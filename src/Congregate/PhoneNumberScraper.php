@@ -115,7 +115,7 @@ class PhoneNumberScraper implements ScraperInterface
 		$areaCodes = [ '01', '02', '03', '04', '05', '06', '07', '08' ];
 
 		$country    = "(?:00|\+)61";
-		$area       = "(?:" . implode('|', $areaCodes) . ")";
+		$area       = "\(?(?:" . implode('|', $areaCodes) . ")\)?";
 		$subscriber = "(?:[0-9]{8}|[0-9]{4} [0-9]{4}|[0-9]{2} [0-9]{3} [0-9]{3})";
 
 		$patterns = [
