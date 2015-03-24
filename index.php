@@ -25,7 +25,8 @@ try {
 
 	libxml_clear_errors();
 
-	$results->phoneNumbers = PhoneNumberScraper::scrape($doc);
+	$results->phone_numbers   = PhoneNumberScraper::scrape($doc);
+	$results->email_addresses = EmailAddressScraper::scrape($doc);
 
 	echo json_encode($results) . "\n";
 } catch ( \Exception $e ) {

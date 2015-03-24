@@ -30,40 +30,36 @@ class PhoneNumberScraper implements ScraperInterface
 
 	public static function scrape(\DOMDocument $doc) {
 		$phoneNumbers = [];
-		$results      = [
-			'href:tel'   => [],
-			'href:skype' => [],
-			'country:us' => []
-			];
+		$results      = [];
 
 		$xpath = new \DOMXpath($doc);
 
 		$textNodes = $xpath->query('//text()');
 
+		$text = '';
+
 		foreach ( $textNodes as $textNode ) {
-			$text = $textNode->textContent;
-
-			if ( $result = self::testUS($text) ) {
-				$results['country:us'] = array_merge($results['country:us'], $result);
-			}
+			$text .= $textNode->textContent . "\n";
 		}
 
-		if ( $result = self::testTel($doc) ) {
-			$results['href:tel'] = $result;
-		}
-
-		if ( $result = self::testSkype($doc) ) {
-			$results['href:skype'] = $result;
-		}
+		$results['country:au']  = self::testCountryAU($text);
+		$results['country:ca']  = self::testCountryCA($text);
+		$results['country:us']  = self::testCountryUS($text);
+		$results['proto:skype'] = self::testProtoSkype($doc);
+		$results['proto:sms']   = self::testProtoSms($doc);
+		$results['proto:tel']   = self::testProtoTel($doc);
 
 		foreach ( $results as $locality => $values ) {
 			if ( $values ) {
-				foreach ( $values as $value ) {
-					if ( !isset($phoneNumbers[$value]) ) {
-						$phoneNumbers[$value] = [];
+				foreach ( $values as $phoneNumber ) {
+					if ( !isset($phoneNumbers[$phoneNumber]) ) {
+						$phoneNumbers[$phoneNumber] = (object) [
+							'phone_number' => $phoneNumber,
+							'matches'      => []
+							];
 					}
 
-					$phoneNumbers[$value][] = $locality;
+					$phoneNumbers[$phoneNumber]->matches[] = $locality;
 				}
 			}
 		}
@@ -72,34 +68,42 @@ class PhoneNumberScraper implements ScraperInterface
 
 		ksort($phoneNumbers);
 
+		$phoneNumbers = array_values($phoneNumbers);
+
 		return $phoneNumbers;
 	}
 
-	private static function testTel(\DOMDocument $doc) {
+	private static function testProtoSkype(\DOMDocument $doc) {
 		$results = [];
 
-		foreach ( $doc->getElementsByTagName('a') as $anchor ) {
-			if ( $link = $anchor->getAttribute('href') ) {
-				if ( preg_match('/^tel:(.+$)/', $link, $match) && isset($match[1]) ) {
-					$results[] = $match[1];
-				}
+		$values = self::testProto('skype', $doc);;
+
+		foreach ( $values as $value ) {
+			$participants = explode(';', preg_replace('/\?.*$/', '', $value));
+
+			foreach ( $participants as $participant ) {
+				$results[] = $participant;
 			}
 		}
 
-		return $results;
+		return array_unique($results);
 	}
 
-	private static function testSkype(\DOMDocument $doc) {
+	private static function testProtoSms(\DOMDocument $doc) {
+		return self::testProto('sms', $doc);;
+	}
+
+	private static function testProtoTel(\DOMDocument $doc) {
+		return self::testProto('tel', $doc);;
+	}
+
+	private static function testProto($proto, \DOMDocument $doc) {
 		$results = [];
 
 		foreach ( $doc->getElementsByTagName('a') as $anchor ) {
 			if ( $link = $anchor->getAttribute('href') ) {
-				if ( preg_match('/^skype:(.+$)/', $link, $match) && isset($match[1]) ) {
-					$participants = explode(';', preg_replace('/\?.*$/', '', $match[1]));
-
-					foreach ( $participants as $participant ) {
-						$results[] = $participant;
-					}
+				if ( preg_match('/^' . preg_quote($proto) . ':(.+$)/', $link, $match) && isset($match[1]) ) {
+					$results[] = $match[1];
 				}
 			}
 		}
@@ -107,7 +111,38 @@ class PhoneNumberScraper implements ScraperInterface
 		return array_unique($results);
 	}
 
-	private static function testUS($string = '') {
+	private static function testCountryAU($string = '') {
+		$areaCodes = [ '01', '02', '03', '04', '05', '06', '07', '08' ];
+
+		$country    = "(?:00|\+)61";
+		$area       = "(?:" . implode('|', $areaCodes) . ")";
+		$subscriber = "(?:[0-9]{8}|[0-9]{4} [0-9]{4}|[0-9]{2} [0-9]{3} [0-9]{3})";
+
+		$patterns = [
+			"${country}${area}${subscriber}",
+			"${country} ${area}${subscriber}",
+			"${country} ${area} ${subscriber}",
+			"${area}${subscriber}",
+			"${area} ${subscriber}",
+			"${subscriber}",
+			];
+
+		return self::evaluate($patterns, $string);
+	}
+
+	private static function testCountryCA($string = '') {
+		$areaCodes = [
+			'403', '587', '780', '236', '250', '604', '778', '204', '431', '506',
+			'709', '867', '782', '902', '867', '226', '249', '289', '343', '365',
+			'416', '437', '519', '613', '647', '705', '807', '905', '782', '902',
+			'418', '438', '450', '514', '579', '581', '819', '873', '306', '639',
+			'867', '600', '622', '800', '844', '855', '866', '877', '888',
+			];
+
+		return self::testNANP($string, $areaCodes);
+	}
+
+	private static function testCountryUS($string = '') {
 		$areaCodes = [
 			'205', '251', '256', '334', '938', '907', '480', '520', '602', '623',
 			'928', '479', '501', '870', '209', '213', '310', '323', '408', '415',
@@ -143,6 +178,10 @@ class PhoneNumberScraper implements ScraperInterface
 		 	'888',
 			];
 
+		return self::testNANP($string, $areaCodes);
+	}
+
+	private static function testNANP($string = '', array $areaCodes = []) {
 		$country    = "(?:00|\+)1";
 		$area       = "(?:" . implode('|', $areaCodes) . ")";
 		$co         = "[2-9][0-9]{2}";
@@ -169,12 +208,10 @@ class PhoneNumberScraper implements ScraperInterface
 		$results = [];
 
 		foreach ( $patterns as $pattern ) {
-			if ( preg_match_all('/(?:^|\s|\()' . $pattern . '(?:\)|\s|$)/i', $string, $matches) ) {
-				foreach ( $matches as $match ) {
-					$result = rtrim(ltrim(trim($match[0]), '('), ')');
-
-					if ( !in_array($result, $results) ) {
-						$results[] = $result;
+			if ( preg_match_all('/(?:^|\s|\()(' . $pattern . ')(?:\)|\s|$)/i', $string, $matches) ) {
+				foreach ( $matches[1] as $match ) {
+					if ( !in_array($match, $results) ) {
+						$results[] = $match;
 					}
 				}
 			}
